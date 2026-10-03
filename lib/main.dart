@@ -40,6 +40,31 @@ class ProductivityApp extends StatelessWidget {
 
 enum TaskRecurrence { none, daily, weekly, monthly }
 
+class DeviceSize {
+  static bool isIPadMini(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final height = MediaQuery.of(context).size.height;
+    return width < 768 && width > 500 && height < 1024;
+  }
+
+  static bool isTablet(BuildContext context) => MediaQuery.of(context).size.width >= 600;
+
+  static EdgeInsets getPadding(BuildContext context) {
+    if (isIPadMini(context)) {
+      return const EdgeInsets.symmetric(horizontal: 14, vertical: 12);
+    }
+    return const EdgeInsets.symmetric(horizontal: 20, vertical: 16);
+  }
+
+  static double getCardHeight(BuildContext context) {
+    return isIPadMini(context) ? 100 : 120;
+  }
+
+  static double getSpacing(BuildContext context) {
+    return isIPadMini(context) ? 12 : 16;
+  }
+}
+
 class Project {
   Project({
     required this.name,
@@ -377,9 +402,11 @@ class _ProductivityHomeState extends State<ProductivityHome> {
       NotesScreen(store: _store),
     ];
 
-    final isTablet = MediaQuery.of(context).size.width >= 800;
+    final isLargeTablet = MediaQuery.of(context).size.width >= 900;
+    final isTablet = DeviceSize.isTablet(context);
+    final isIPadMini = DeviceSize.isIPadMini(context);
 
-    if (isTablet) {
+    if (isLargeTablet) {
       return AnimatedBuilder(
         animation: _store,
         builder: (context, _) {
@@ -390,7 +417,7 @@ class _ProductivityHomeState extends State<ProductivityHome> {
                   selectedIndex: _selectedIndex,
                   onDestinationSelected: (value) => setState(() => _selectedIndex = value),
                   labelType: NavigationRailLabelType.all,
-                  extended: MediaQuery.of(context).size.width > 900,
+                  extended: true,
                   destinations: const [
                     NavigationRailDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: Text('Dashboard')),
                     NavigationRailDestination(icon: Icon(Icons.checklist_outlined), selectedIcon: Icon(Icons.checklist), label: Text('Tasks')),
@@ -415,6 +442,7 @@ class _ProductivityHomeState extends State<ProductivityHome> {
           bottomNavigationBar: NavigationBar(
             selectedIndex: _selectedIndex,
             onDestinationSelected: (value) => setState(() => _selectedIndex = value),
+            height: isIPadMini ? 65 : 80,
             destinations: const [
               NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
               NavigationDestination(icon: Icon(Icons.checklist_outlined), selectedIcon: Icon(Icons.checklist), label: 'Tasks'),
@@ -436,7 +464,9 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isTablet = MediaQuery.of(context).size.width >= 800;
+    final isIPadMini = DeviceSize.isIPadMini(context);
+    final spacing = DeviceSize.getSpacing(context);
+    final padding = DeviceSize.getPadding(context);
     final upcomingTasks = store.upcomingTasks().take(5).toList();
     final overdueTasks = store.overdueTasks();
 
@@ -448,7 +478,7 @@ class DashboardScreen extends StatelessWidget {
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.all(isTablet ? 28 : 20),
+          padding: padding,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -458,103 +488,102 @@ class DashboardScreen extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Good morning', style: TextStyle(fontSize: 18, color: Colors.grey)),
-                      const SizedBox(height: 6),
-                      const Text('Your focus dashboard', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+                      Text('Good morning', style: TextStyle(fontSize: isIPadMini ? 14 : 16, color: Colors.grey)),
+                      SizedBox(height: spacing / 2),
+                      Text('Your focus dashboard', style: TextStyle(fontSize: isIPadMini ? 24 : 28, fontWeight: FontWeight.bold)),
                     ],
                   ),
-                  if (isTablet)
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                      ),
-                      child: Column(
-                        children: [
-                          Text('${store.completionRate.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blue)),
-                          const Text('Complete', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                        ],
-                      ),
+                  Container(
+                    padding: EdgeInsets.all(spacing),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blue.withOpacity(0.3)),
                     ),
+                    child: Column(
+                      children: [
+                        Text('${store.completionRate.toStringAsFixed(1)}%', style: TextStyle(fontSize: isIPadMini ? 18 : 22, fontWeight: FontWeight.bold, color: Colors.blue)),
+                        Text('Complete', style: TextStyle(fontSize: isIPadMini ? 10 : 12, color: Colors.grey)),
+                      ],
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 32),
+              SizedBox(height: spacing + 8),
               GridView.count(
                 shrinkWrap: true,
-                crossAxisCount: isTablet ? 4 : 3,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: isTablet ? 1.3 : 1.5,
+                crossAxisCount: 2,
+                crossAxisSpacing: spacing - 4,
+                mainAxisSpacing: spacing - 4,
+                childAspectRatio: isIPadMini ? 1.8 : 1.6,
                 children: [
                   StatCard(title: 'Tasks', value: '${store.tasks.length}', color: Colors.blue, icon: Icons.task_alt),
                   StatCard(title: 'Done', value: '${store.completedTasks}', color: Colors.green, icon: Icons.check_circle),
                   StatCard(title: 'Open', value: '${store.openTasks}', color: Colors.orange, icon: Icons.hourglass_empty),
-                  if (isTablet) StatCard(title: 'Projects', value: '${store.projects.length}', color: Colors.purple, icon: Icons.folder),
+                  StatCard(title: 'Projects', value: '${store.projects.length}', color: Colors.purple, icon: Icons.folder),
                 ],
               ),
-              const SizedBox(height: 32),
+              SizedBox(height: spacing + 8),
               if (overdueTasks.isNotEmpty) ...[
                 Row(
                   children: [
                     const Icon(Icons.warning_amber_rounded, color: Colors.red),
-                    const SizedBox(width: 8),
-                    const Text('Overdue Tasks', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.red)),
+                    SizedBox(width: spacing / 2),
+                    const Text('Overdue Tasks', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
                     const Spacer(),
-                    Text('${overdueTasks.length} items', style: const TextStyle(color: Colors.grey)),
+                    Text('${overdueTasks.length}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
                   ],
                 ),
-                const SizedBox(height: 12),
-                ...overdueTasks.take(3).map((task) => PremiumTaskCard(task: task, store: store)),
-                const SizedBox(height: 24),
+                SizedBox(height: spacing - 4),
+                ...overdueTasks.take(2).map((task) => Padding(padding: EdgeInsets.only(bottom: spacing - 4), child: PremiumTaskCard(task: task, store: store))),
+                SizedBox(height: spacing),
               ],
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Today\u2019s focus', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  Text('${store.todayTasks().length} items', style: const TextStyle(color: Colors.grey)),
+                  const Text('Today\u2019s focus', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text('${store.todayTasks().length} items', style: const TextStyle(color: Colors.grey, fontSize: 12)),
                 ],
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: spacing - 4),
               if (store.todayTasks().isEmpty)
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(24),
+                  padding: EdgeInsets.all(spacing + 4),
                   decoration: BoxDecoration(
                     color: Colors.blue.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.blue.withOpacity(0.2)),
                   ),
                   child: const Center(
-                    child: Text('No tasks today. Great work!', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                    child: Text('No tasks today. Great work!', style: TextStyle(color: Colors.grey, fontSize: 14)),
                   ),
                 )
               else
-                ...store.todayTasks().map((task) => PremiumTaskCard(task: task, store: store)),
-              const SizedBox(height: 24),
+                ...store.todayTasks().map((task) => Padding(padding: EdgeInsets.only(bottom: spacing - 4), child: PremiumTaskCard(task: task, store: store))),
+              SizedBox(height: spacing),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Upcoming', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  Text('${upcomingTasks.length} items', style: const TextStyle(color: Colors.grey)),
+                  const Text('Upcoming', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text('${upcomingTasks.length} items', style: const TextStyle(color: Colors.grey, fontSize: 12)),
                 ],
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: spacing - 4),
               if (upcomingTasks.isEmpty)
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(24),
+                  padding: EdgeInsets.all(spacing + 4),
                   decoration: BoxDecoration(
                     color: Colors.grey.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.grey.withOpacity(0.2)),
                   ),
-                  child: const Center(child: Text('No upcoming tasks', style: TextStyle(color: Colors.grey))),
+                  child: const Center(child: Text('No upcoming tasks', style: TextStyle(color: Colors.grey, fontSize: 14))),
                 )
               else
-                ...upcomingTasks.map((task) => UpcomingTaskCard(task: task, store: store)),
-              const SizedBox(height: 28),
+                ...upcomingTasks.take(3).map((task) => Padding(padding: EdgeInsets.only(bottom: spacing - 4), child: UpcomingTaskCard(task: task, store: store))),
+              SizedBox(height: spacing + 8),
             ],
           ),
         ),
@@ -573,11 +602,13 @@ class StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isIPadMini = DeviceSize.isIPadMini(context);
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(isIPadMini ? 10 : 12),
       decoration: BoxDecoration(
         color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: color.withOpacity(0.2)),
       ),
       child: Column(
@@ -585,16 +616,16 @@ class StatCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: EdgeInsets.all(isIPadMini ? 5 : 6),
             decoration: BoxDecoration(color: color.withOpacity(0.2), shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 20),
+            child: Icon(icon, color: color, size: isIPadMini ? 16 : 18),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w500)),
-              const SizedBox(height: 4),
-              Text(value, style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: color)),
+              Text(title, style: TextStyle(color: Colors.grey, fontSize: isIPadMini ? 10 : 11, fontWeight: FontWeight.w500)),
+              SizedBox(height: isIPadMini ? 2 : 3),
+              Text(value, style: TextStyle(fontSize: isIPadMini ? 20 : 24, fontWeight: FontWeight.bold, color: color)),
             ],
           ),
         ],
@@ -611,12 +642,14 @@ class PremiumTaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isIPadMini = DeviceSize.isIPadMini(context);
+    final spacing = DeviceSize.getSpacing(context);
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(isIPadMini ? 10 : 12),
       decoration: BoxDecoration(
         color: task.isOverdue ? Colors.red.withOpacity(0.05) : Colors.grey.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: task.isOverdue ? Colors.red.withOpacity(0.3) : Colors.grey.withOpacity(0.1),
         ),
@@ -626,17 +659,17 @@ class PremiumTaskCard extends StatelessWidget {
           GestureDetector(
             onTap: () => store.toggleTask(task),
             child: Container(
-              width: 32,
-              height: 32,
+              width: isIPadMini ? 28 : 32,
+              height: isIPadMini ? 28 : 32,
               decoration: BoxDecoration(
                 color: task.isDone ? priorityColor(task.priority) : Colors.transparent,
                 border: Border.all(color: priorityColor(task.priority), width: 2),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
               ),
-              child: task.isDone ? const Icon(Icons.check, color: Colors.white, size: 18) : null,
+              child: task.isDone ? Icon(Icons.check, color: Colors.white, size: isIPadMini ? 14 : 16) : null,
             ),
           ),
-          const SizedBox(width: 14),
+          SizedBox(width: spacing - 4),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -645,66 +678,37 @@ class PremiumTaskCard extends StatelessWidget {
                   task.title,
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    fontSize: 15,
+                    fontSize: isIPadMini ? 12 : 14,
                     decoration: task.isDone ? TextDecoration.lineThrough : null,
                     color: task.isDone ? Colors.grey : Colors.black87,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: isIPadMini ? 2 : 3),
                 Row(
                   children: [
                     if (task.dueDate != null) ...[
-                      Icon(Icons.calendar_today, size: 12, color: task.isOverdue ? Colors.red : Colors.grey),
-                      const SizedBox(width: 4),
-                      Text(_formatDate(task.dueDate), style: TextStyle(fontSize: 12, color: task.isOverdue ? Colors.red : Colors.grey)),
-                      const SizedBox(width: 12),
+                      Icon(Icons.calendar_today, size: isIPadMini ? 10 : 11, color: task.isOverdue ? Colors.red : Colors.grey),
+                      SizedBox(width: isIPadMini ? 2 : 3),
+                      Text(_formatDate(task.dueDate), style: TextStyle(fontSize: isIPadMini ? 10 : 11, color: task.isOverdue ? Colors.red : Colors.grey)),
                     ],
-                    Text(store.projectName(task.projectId), style: const TextStyle(fontSize: 12, color: Colors.grey)),
                   ],
                 ),
-                if (task.tags.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    children: task.tags
-                        .take(2)
-                        .map((tag) => Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(tag, style: const TextStyle(fontSize: 10, color: Colors.blue)),
-                            ))
-                        .toList(),
-                  ),
-                ]
               ],
             ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: spacing - 6),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            padding: EdgeInsets.symmetric(horizontal: isIPadMini ? 6 : 8, vertical: 2),
             decoration: BoxDecoration(
               color: priorityColor(task.priority).withOpacity(0.15),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
-              task.priority[0].toUpperCase() + task.priority.substring(1),
-              style: TextStyle(color: priorityColor(task.priority), fontWeight: FontWeight.w600, fontSize: 11),
+              task.priority[0].toUpperCase(),
+              style: TextStyle(color: priorityColor(task.priority), fontWeight: FontWeight.w600, fontSize: isIPadMini ? 9 : 10),
             ),
-          ),
-          const SizedBox(width: 8),
-          PopupMenuButton(
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                onTap: () => store.deleteTask(task),
-                child: const Row(
-                  children: [Icon(Icons.delete, color: Colors.red), SizedBox(width: 8), Text('Delete')],
-                ),
-              ),
-            ],
-            child: const Icon(Icons.more_vert, size: 20),
           ),
         ],
       ),
@@ -720,32 +724,32 @@ class UpcomingTaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isIPadMini = DeviceSize.isIPadMini(context);
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(isIPadMini ? 8 : 10),
       decoration: BoxDecoration(
         color: Colors.grey.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.withOpacity(0.1)),
       ),
       child: Row(
         children: [
           Container(
-            width: 10,
-            height: 10,
+            width: 8,
+            height: 8,
             decoration: BoxDecoration(color: priorityColor(task.priority), shape: BoxShape.circle),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: isIPadMini ? 8 : 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(task.title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                Text(_formatDate(task.dueDate), style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                Text(task.title, style: TextStyle(fontWeight: FontWeight.w600, fontSize: isIPadMini ? 12 : 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(_formatDate(task.dueDate), style: TextStyle(color: Colors.grey, fontSize: isIPadMini ? 10 : 11)),
               ],
             ),
           ),
-          Text(store.projectName(task.projectId), style: const TextStyle(color: Colors.grey, fontSize: 12)),
         ],
       ),
     );
@@ -770,7 +774,8 @@ class _TasksScreenState extends State<TasksScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isTablet = MediaQuery.of(context).size.width >= 800;
+    final isIPadMini = DeviceSize.isIPadMini(context);
+    final spacing = DeviceSize.getSpacing(context);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Tasks')),
@@ -778,33 +783,39 @@ class _TasksScreenState extends State<TasksScreen> {
         child: Column(
           children: [
             SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: DeviceSize.getPadding(context),
               child: Column(
                 children: [
                   TextField(
                     controller: _titleController,
                     decoration: InputDecoration(
                       labelText: 'Task title',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isIPadMini ? 10 : 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       prefixIcon: const Icon(Icons.check_circle_outline),
+                      isDense: isIPadMini,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: spacing - 2),
                   TextField(
                     controller: _notesController,
                     decoration: InputDecoration(
                       labelText: 'Notes',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isIPadMini ? 10 : 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       prefixIcon: const Icon(Icons.note_outlined),
+                      isDense: isIPadMini,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: spacing - 2),
                   DropdownButtonFormField<String>(
                     value: _selectedProjectId.isEmpty ? null : _selectedProjectId,
                     hint: const Text('Project'),
                     decoration: InputDecoration(
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       prefixIcon: const Icon(Icons.folder_outlined),
+                      isDense: isIPadMini,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isIPadMini ? 8 : 10),
                     ),
                     items: [
                       const DropdownMenuItem(value: '', child: Text('General')),
@@ -812,12 +823,14 @@ class _TasksScreenState extends State<TasksScreen> {
                     ],
                     onChanged: (value) => setState(() => _selectedProjectId = value ?? ''),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: spacing - 2),
                   DropdownButtonFormField<String>(
                     value: _priority,
                     decoration: InputDecoration(
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       prefixIcon: const Icon(Icons.flag_outlined),
+                      isDense: isIPadMini,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isIPadMini ? 8 : 10),
                     ),
                     items: const [
                       DropdownMenuItem(value: 'low', child: Text('Low Priority')),
@@ -826,39 +839,28 @@ class _TasksScreenState extends State<TasksScreen> {
                     ],
                     onChanged: (value) => setState(() => _priority = value ?? 'medium'),
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          readOnly: true,
-                          decoration: InputDecoration(
-                            hintText: _dueDate == null ? 'No due date' : _formatDate(_dueDate),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            prefixIcon: const Icon(Icons.calendar_today_outlined),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton.icon(
-                        onPressed: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: DateTime.now(),
-                            firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                            lastDate: DateTime.now().add(const Duration(days: 3650)),
-                          );
-                          if (picked != null) setState(() => _dueDate = picked);
-                        },
-                        icon: const Icon(Icons.add),
-                        label: const Text('Date'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: spacing - 2),
                   SizedBox(
                     width: double.infinity,
-                    height: 50,
+                    height: isIPadMini ? 40 : 48,
+                    child: FilledButton.icon(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: DateTime.now(),
+                          firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                          lastDate: DateTime.now().add(const Duration(days: 3650)),
+                        );
+                        if (picked != null) setState(() => _dueDate = picked);
+                      },
+                      icon: const Icon(Icons.calendar_today_outlined),
+                      label: Text(_dueDate == null ? 'Set due date' : _formatDate(_dueDate)),
+                    ),
+                  ),
+                  SizedBox(height: spacing + 2),
+                  SizedBox(
+                    width: double.infinity,
+                    height: isIPadMini ? 42 : 50,
                     child: FilledButton.icon(
                       onPressed: () {
                         widget.store.addTask(
@@ -887,8 +889,8 @@ class _TasksScreenState extends State<TasksScreen> {
                 animation: widget.store,
                 builder: (context, _) {
                   return ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    children: widget.store.tasks.map((task) => PremiumTaskCard(task: task, store: widget.store)).toList(),
+                    padding: EdgeInsets.symmetric(horizontal: spacing - 2, vertical: spacing - 4),
+                    children: widget.store.tasks.map((task) => Padding(padding: EdgeInsets.only(bottom: spacing - 4), child: PremiumTaskCard(task: task, store: widget.store))).toList(),
                   );
                 },
               ),
@@ -920,6 +922,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isIPadMini = DeviceSize.isIPadMini(context);
+    final spacing = DeviceSize.getSpacing(context);
     final tasksForDate = widget.store.tasks
         .where((task) => task.dueDate != null && DateTime(task.dueDate!.year, task.dueDate!.month, task.dueDate!.day).compareTo(DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day)) == 0)
         .toList();
@@ -930,45 +934,46 @@ class _CalendarScreenState extends State<CalendarScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: DeviceSize.getPadding(context),
               child: Column(
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => setState(() => _selectedDate = DateTime(_selectedDate.year, _selectedDate.month - 1))),
-                      Text('${_monthName(_selectedDate.month)} ${_selectedDate.year}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text('${_monthName(_selectedDate.month)} ${_selectedDate.year}', style: TextStyle(fontSize: isIPadMini ? 14 : 16, fontWeight: FontWeight.bold)),
                       IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => setState(() => _selectedDate = DateTime(_selectedDate.year, _selectedDate.month + 1))),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: spacing - 4),
                   GridView.count(
                     shrinkWrap: true,
                     crossAxisCount: 7,
-                    children: _buildCalendarDays(),
+                    childAspectRatio: 1.2,
+                    children: _buildCalendarDays(context),
                   ),
                 ],
               ),
             ),
             Expanded(
               child: Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.all(16),
+                margin: EdgeInsets.all(spacing - 2),
+                padding: EdgeInsets.all(spacing - 2),
                 decoration: BoxDecoration(
                   color: Colors.blue.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.blue.withOpacity(0.2)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('${_formatDate(_selectedDate)} (${tasksForDate.length} tasks)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 12),
+                    Text('${_formatDate(_selectedDate)} (${tasksForDate.length} tasks)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: isIPadMini ? 12 : 14)),
+                    SizedBox(height: spacing - 4),
                     if (tasksForDate.isEmpty)
                       const Center(child: Text('No tasks scheduled', style: TextStyle(color: Colors.grey)))
                     else
                       Expanded(
-                        child: ListView(children: tasksForDate.map((task) => PremiumTaskCard(task: task, store: widget.store)).toList()),
+                        child: ListView(children: tasksForDate.map((task) => Padding(padding: EdgeInsets.only(bottom: spacing - 4), child: PremiumTaskCard(task: task, store: widget.store))).toList()),
                       ),
                   ],
                 ),
@@ -980,13 +985,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  List<Widget> _buildCalendarDays() {
+  List<Widget> _buildCalendarDays(BuildContext context) {
+    final isIPadMini = DeviceSize.isIPadMini(context);
     final daysInMonth = DateTime(_selectedDate.year, _selectedDate.month + 1, 0).day;
     final firstDay = DateTime(_selectedDate.year, _selectedDate.month, 1).weekday;
     final days = <Widget>[];
 
     for (var i = 0; i < 7; i++) {
-      days.add(Center(child: Text(['M', 'T', 'W', 'T', 'F', 'S', 'S'][i], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))));
+      days.add(Center(child: Text(['M', 'T', 'W', 'T', 'F', 'S', 'S'][i], style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: isIPadMini ? 10 : 12))));
     }
 
     for (var i = 1; i < firstDay; i++) {
@@ -1002,23 +1008,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
         GestureDetector(
           onTap: () => setState(() => _selectedDate = date),
           child: Container(
-            margin: const EdgeInsets.all(4),
+            margin: const EdgeInsets.all(2),
             decoration: BoxDecoration(
               color: isSelected ? Colors.blue : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: tasksCount > 0 ? Colors.blue : Colors.transparent),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: tasksCount > 0 ? Colors.blue : Colors.transparent, width: 0.5),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(day.toString(), style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? Colors.white : Colors.black87)),
+                Text(day.toString(), style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? Colors.white : Colors.black87, fontSize: isIPadMini ? 11 : 12)),
                 if (tasksCount > 0)
-                  Container(
-                    width: 4,
-                    height: 4,
-                    margin: const EdgeInsets.only(top: 2),
-                    decoration: BoxDecoration(color: isSelected ? Colors.white : Colors.blue, shape: BoxShape.circle),
-                  ),
+                  Container(width: 3, height: 3, margin: const EdgeInsets.only(top: 1), decoration: BoxDecoration(color: isSelected ? Colors.white : Colors.blue, shape: BoxShape.circle)),
               ],
             ),
           ),
@@ -1046,7 +1047,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isTablet = MediaQuery.of(context).size.width >= 800;
+    final isIPadMini = DeviceSize.isIPadMini(context);
+    final spacing = DeviceSize.getSpacing(context);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Projects')),
@@ -1054,7 +1056,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: DeviceSize.getPadding(context),
               child: Row(
                 children: [
                   Expanded(
@@ -1062,19 +1064,24 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                       controller: _controller,
                       decoration: InputDecoration(
                         labelText: 'New project',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isIPadMini ? 8 : 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                         prefixIcon: const Icon(Icons.add),
+                        isDense: isIPadMini,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  FilledButton(
-                    onPressed: () {
-                      widget.store.addProject(_controller.text);
-                      _controller.clear();
-                      setState(() {});
-                    },
-                    child: const Text('Add'),
+                  SizedBox(width: spacing - 4),
+                  SizedBox(
+                    height: isIPadMini ? 40 : 48,
+                    child: FilledButton(
+                      onPressed: () {
+                        widget.store.addProject(_controller.text);
+                        _controller.clear();
+                        setState(() {});
+                      },
+                      child: const Text('Add'),
+                    ),
                   ),
                 ],
               ),
@@ -1084,38 +1091,39 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                 animation: widget.store,
                 builder: (context, _) {
                   return GridView.count(
-                    padding: const EdgeInsets.all(16),
-                    crossAxisCount: isTablet ? 3 : 2,
-                    mainAxisSpacing: 16,
-                    crossAxisSpacing: 16,
+                    padding: EdgeInsets.all(spacing - 2),
+                    crossAxisCount: 2,
+                    mainAxisSpacing: spacing - 4,
+                    crossAxisSpacing: spacing - 4,
+                    childAspectRatio: isIPadMini ? 1.4 : 1.3,
                     children: widget.store.projects
                         .map((project) => Container(
-                              padding: const EdgeInsets.all(16),
+                              padding: EdgeInsets.all(spacing - 2),
                               decoration: BoxDecoration(
                                 color: projectColor(project.color).withOpacity(0.08),
-                                borderRadius: BorderRadius.circular(16),
+                                borderRadius: BorderRadius.circular(12),
                                 border: Border.all(color: projectColor(project.color).withOpacity(0.2)),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Container(
-                                    width: 48,
-                                    height: 48,
+                                    width: isIPadMini ? 36 : 40,
+                                    height: isIPadMini ? 36 : 40,
                                     decoration: BoxDecoration(
                                       color: projectColor(project.color),
-                                      borderRadius: BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(8),
                                     ),
-                                    child: Icon(projectIcon(project.icon), color: Colors.white),
+                                    child: Icon(projectIcon(project.icon), color: Colors.white, size: isIPadMini ? 18 : 20),
                                   ),
-                                  const SizedBox(height: 12),
-                                  Text(project.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                  SizedBox(height: spacing - 6),
+                                  Text(project.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: isIPadMini ? 13 : 14), maxLines: 1, overflow: TextOverflow.ellipsis),
                                   if (project.description.isNotEmpty) ...[
-                                    const SizedBox(height: 4),
-                                    Text(project.description, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                    SizedBox(height: 2),
+                                    Text(project.description, style: TextStyle(color: Colors.grey, fontSize: isIPadMini ? 9 : 10), maxLines: 1, overflow: TextOverflow.ellipsis),
                                   ],
                                   const Spacer(),
-                                  Text('${widget.store.tasksForProject(project.id).length} tasks', style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w500)),
+                                  Text('${widget.store.tasksForProject(project.id).length} tasks', style: TextStyle(color: Colors.grey, fontSize: isIPadMini ? 10 : 11, fontWeight: FontWeight.w500)),
                                 ],
                               ),
                             ))
@@ -1147,40 +1155,48 @@ class _NotesScreenState extends State<NotesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isIPadMini = DeviceSize.isIPadMini(context);
+    final spacing = DeviceSize.getSpacing(context);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Notes')),
       body: SafeArea(
         child: Column(
           children: [
             SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: DeviceSize.getPadding(context),
               child: Column(
                 children: [
                   TextField(
                     controller: _titleController,
                     decoration: InputDecoration(
                       labelText: 'Note title',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isIPadMini ? 8 : 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       prefixIcon: const Icon(Icons.title),
+                      isDense: isIPadMini,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: spacing - 2),
                   TextField(
                     controller: _contentController,
-                    maxLines: 5,
+                    maxLines: isIPadMini ? 3 : 4,
                     decoration: InputDecoration(
                       labelText: 'Notes content',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isIPadMini ? 8 : 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       prefixIcon: const Icon(Icons.description_outlined),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: spacing - 2),
                   DropdownButtonFormField<String>(
                     value: _selectedProjectId.isEmpty ? null : _selectedProjectId,
                     hint: const Text('Project'),
                     decoration: InputDecoration(
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       prefixIcon: const Icon(Icons.folder_outlined),
+                      isDense: isIPadMini,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isIPadMini ? 8 : 10),
                     ),
                     items: [
                       const DropdownMenuItem(value: '', child: Text('General')),
@@ -1188,10 +1204,10 @@ class _NotesScreenState extends State<NotesScreen> {
                     ],
                     onChanged: (value) => setState(() => _selectedProjectId = value ?? ''),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: spacing),
                   SizedBox(
                     width: double.infinity,
-                    height: 50,
+                    height: isIPadMini ? 42 : 50,
                     child: FilledButton.icon(
                       onPressed: () {
                         widget.store.addNote(
@@ -1216,14 +1232,14 @@ class _NotesScreenState extends State<NotesScreen> {
                 animation: widget.store,
                 builder: (context, _) {
                   return ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: EdgeInsets.symmetric(horizontal: spacing - 2),
                     children: widget.store.notes
                         .map((note) => Container(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              padding: const EdgeInsets.all(14),
+                              margin: EdgeInsets.only(bottom: spacing - 4),
+                              padding: EdgeInsets.all(spacing - 2),
                               decoration: BoxDecoration(
                                 color: Colors.grey.withOpacity(0.04),
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius: BorderRadius.circular(12),
                                 border: Border.all(color: Colors.grey.withOpacity(0.1)),
                               ),
                               child: Row(
@@ -1232,21 +1248,24 @@ class _NotesScreenState extends State<NotesScreen> {
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text(note.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                        Text(note.title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: isIPadMini ? 12 : 13), maxLines: 1, overflow: TextOverflow.ellipsis),
                                         if (note.content.isNotEmpty) ...[
-                                          const SizedBox(height: 4),
-                                          Text(note.content, style: const TextStyle(color: Colors.grey, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                          SizedBox(height: 2),
+                                          Text(note.content, style: TextStyle(color: Colors.grey, fontSize: isIPadMini ? 10 : 11), maxLines: 1, overflow: TextOverflow.ellipsis),
                                         ],
                                         if (note.projectId != null) ...[
-                                          const SizedBox(height: 6),
-                                          Text(widget.store.projectName(note.projectId), style: const TextStyle(color: Colors.blue, fontSize: 11)),
+                                          SizedBox(height: 3),
+                                          Text(widget.store.projectName(note.projectId), style: TextStyle(color: Colors.blue, fontSize: isIPadMini ? 9 : 10)),
                                         ]
                                       ],
                                     ),
                                   ),
                                   IconButton(
                                     onPressed: () => widget.store.deleteNote(note),
-                                    icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                    icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
+                                    iconSize: isIPadMini ? 18 : 20,
+                                    padding: EdgeInsets.all(isIPadMini ? 4 : 6),
+                                    constraints: BoxConstraints(minWidth: isIPadMini ? 28 : 32, minHeight: isIPadMini ? 28 : 32),
                                   ),
                                 ],
                               ),
@@ -1307,5 +1326,5 @@ IconData projectIcon(String iconName) {
 String _formatDate(DateTime? date) {
   if (date == null) return 'No due date';
   final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  return '${months[date.month - 1]} ${date.day}';
 }
