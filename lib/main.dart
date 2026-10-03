@@ -14,39 +14,59 @@ class ProductivityApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'MiniPad Productivity',
+      title: 'MiniPad Pro',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
+          brightness: Brightness.light,
+        ),
+        fontFamily: 'Segoe UI',
       ),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
+          brightness: Brightness.dark,
+        ),
+        fontFamily: 'Segoe UI',
+      ),
+      themeMode: ThemeMode.system,
       home: const ProductivityHome(),
     );
   }
 }
+
+enum TaskRecurrence { none, daily, weekly, monthly }
 
 class Project {
   Project({
     required this.name,
     this.icon = 'folder',
     this.color = 'purple',
+    this.description = '',
   }) : id = const Uuid().v4();
 
   final String id;
   final String name;
   final String icon;
   final String color;
+  final String description;
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
         'icon': icon,
         'color': color,
+        'description': description,
       };
 
   factory Project.fromJson(Map<String, dynamic> json) => Project(
         name: json['name'] as String,
         icon: json['icon'] as String? ?? 'folder',
         color: json['color'] as String? ?? 'purple',
+        description: json['description'] as String? ?? '',
       );
 }
 
@@ -58,6 +78,8 @@ class TaskItem {
     this.dueDate,
     this.priority = 'medium',
     this.isDone = false,
+    this.recurrence = TaskRecurrence.none,
+    this.tags = const [],
   }) : id = const Uuid().v4();
 
   final String id;
@@ -66,7 +88,9 @@ class TaskItem {
   final String? projectId;
   final DateTime? dueDate;
   final String priority;
-  final bool isDone;
+  bool isDone;
+  final TaskRecurrence recurrence;
+  final List<String> tags;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -76,39 +100,28 @@ class TaskItem {
         'dueDate': dueDate?.toIso8601String(),
         'priority': priority,
         'isDone': isDone,
+        'recurrence': recurrence.toString(),
+        'tags': tags,
       };
 
   factory TaskItem.fromJson(Map<String, dynamic> json) => TaskItem(
         title: json['title'] as String,
         notes: json['notes'] as String? ?? '',
         projectId: json['projectId'] as String?,
-        dueDate: json['dueDate'] == null
-            ? null
-            : DateTime.parse(json['dueDate'] as String),
+        dueDate: json['dueDate'] == null ? null : DateTime.parse(json['dueDate'] as String),
         priority: json['priority'] as String? ?? 'medium',
         isDone: json['isDone'] as bool? ?? false,
-      )..id = json['id'] as String;
+        recurrence: _parseRecurrence(json['recurrence'] as String?),
+        tags: List<String>.from(json['tags'] as List? ?? []),
+      );
 
-  TaskItem copyWith({
-    String? id,
-    String? title,
-    String? notes,
-    String? projectId,
-    DateTime? dueDate,
-    String? priority,
-    bool? isDone,
-  }) {
-    return TaskItem(
-      title: title ?? this.title,
-      notes: notes ?? this.notes,
-      projectId: projectId ?? this.projectId,
-      dueDate: dueDate ?? this.dueDate,
-      priority: priority ?? this.priority,
-      isDone: isDone ?? this.isDone,
-    );
+  static TaskRecurrence _parseRecurrence(String? value) {
+    if (value == null) return TaskRecurrence.none;
+    return TaskRecurrence.values.firstWhere((e) => e.toString() == value, orElse: () => TaskRecurrence.none);
   }
 
-  TaskItem get withId => this; // placeholder to keep functional API simple
+  bool get isOverdue => !isDone && dueDate != null && dueDate!.isBefore(DateTime.now());
+  bool get isDueToday => !isDone && dueDate != null && DateTime(dueDate!.year, dueDate!.month, dueDate!.day).compareTo(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day)) == 0;
 }
 
 class NoteItem {
@@ -134,9 +147,7 @@ class NoteItem {
         title: json['title'] as String,
         content: json['content'] as String? ?? '',
         projectId: json['projectId'] as String?,
-      )..id = json['id'] as String;
-
-  NoteItem get withId => this; // placeholder to keep functional API simple
+      );
 }
 
 class AppStore extends ChangeNotifier {
@@ -145,9 +156,9 @@ class AppStore extends ChangeNotifier {
   }
 
   final List<Project> projects = [
-    Project(name: 'Work', icon: 'work', color: 'purple'),
-    Project(name: 'Personal', icon: 'person', color: 'green'),
-    Project(name: 'Study', icon: 'school', color: 'blue'),
+    Project(name: 'Work', icon: 'work', color: 'purple', description: 'Professional projects'),
+    Project(name: 'Personal', icon: 'person', color: 'green', description: 'Personal goals'),
+    Project(name: 'Study', icon: 'school', color: 'blue', description: 'Learning & development'),
   ];
 
   final List<TaskItem> tasks = [];
@@ -198,11 +209,12 @@ class AppStore extends ChangeNotifier {
 
     tasks.addAll([
       TaskItem(
-        title: 'Review weekly roadmap',
+        title: 'Review product roadmap',
         notes: 'Finalize design handoff for sprint review.',
         projectId: projects.first.id,
         dueDate: DateTime.now().add(const Duration(days: 2)),
         priority: 'high',
+        tags: ['review', 'urgent'],
       ),
       TaskItem(
         title: 'Plan personal errands',
@@ -210,6 +222,16 @@ class AppStore extends ChangeNotifier {
         projectId: projects[1].id,
         dueDate: DateTime.now().add(const Duration(days: 1)),
         priority: 'medium',
+        tags: ['errands'],
+      ),
+      TaskItem(
+        title: 'Weekly team standup',
+        notes: 'Prepare update on progress.',
+        projectId: projects.first.id,
+        dueDate: DateTime.now(),
+        priority: 'high',
+        isDone: true,
+        recurrence: TaskRecurrence.weekly,
       ),
     ]);
 
@@ -244,22 +266,26 @@ class AppStore extends ChangeNotifier {
     );
   }
 
-  void addProject(String name) {
+  void addProject(String name, {String description = ''}) {
     if (name.trim().isEmpty) return;
-    projects.add(Project(name: name.trim()));
+    projects.add(Project(name: name.trim(), description: description.trim()));
     notifyListeners();
     _save();
   }
 
-  void addTask(String title, {String notes = '', String? projectId, DateTime? dueDate, String priority = 'medium'}) {
+  void addTask(String title, {String notes = '', String? projectId, DateTime? dueDate, String priority = 'medium', List<String> tags = const []}) {
     if (title.trim().isEmpty) return;
-    tasks.add(TaskItem(
-      title: title.trim(),
-      notes: notes.trim(),
-      projectId: projectId,
-      dueDate: dueDate,
-      priority: priority,
-    ));
+    tasks.insert(
+      0,
+      TaskItem(
+        title: title.trim(),
+        notes: notes.trim(),
+        projectId: projectId,
+        dueDate: dueDate,
+        priority: priority,
+        tags: tags,
+      ),
+    );
     notifyListeners();
     _save();
   }
@@ -267,14 +293,7 @@ class AppStore extends ChangeNotifier {
   void toggleTask(TaskItem task) {
     final index = tasks.indexWhere((element) => element.id == task.id);
     if (index == -1) return;
-    tasks[index] = TaskItem(
-      title: task.title,
-      notes: task.notes,
-      projectId: task.projectId,
-      dueDate: task.dueDate,
-      priority: task.priority,
-      isDone: !task.isDone,
-    );
+    tasks[index].isDone = !tasks[index].isDone;
     notifyListeners();
     _save();
   }
@@ -287,11 +306,14 @@ class AppStore extends ChangeNotifier {
 
   void addNote(String title, {String content = '', String? projectId}) {
     if (title.trim().isEmpty && content.trim().isEmpty) return;
-    notes.add(NoteItem(
-      title: title.trim().isEmpty ? 'Untitled Note' : title.trim(),
-      content: content.trim(),
-      projectId: projectId,
-    ));
+    notes.insert(
+      0,
+      NoteItem(
+        title: title.trim().isEmpty ? 'Untitled Note' : title.trim(),
+        content: content.trim(),
+        projectId: projectId,
+      ),
+    );
     notifyListeners();
     _save();
   }
@@ -307,9 +329,21 @@ class AppStore extends ChangeNotifier {
     return project?.name ?? 'General';
   }
 
+  List<TaskItem> tasksForProject(String? projectId) => tasks.where((task) => task.projectId == projectId).toList();
+
+  List<TaskItem> todayTasks() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return tasks.where((task) => !task.isDone && task.dueDate != null && DateTime(task.dueDate!.year, task.dueDate!.month, task.dueDate!.day).compareTo(today) == 0).toList();
+  }
+
+  List<TaskItem> overdueTasks() => tasks.where((task) => task.isOverdue).toList()..sort((a, b) => (a.dueDate ?? DateTime.now()).compareTo(b.dueDate ?? DateTime.now()));
+
+  List<TaskItem> upcomingTasks() => tasks.where((task) => !task.isDone && task.dueDate != null).toList()..sort((a, b) => (a.dueDate ?? DateTime.now()).compareTo(b.dueDate ?? DateTime.now()));
+
   int get completedTasks => tasks.where((task) => task.isDone).length;
   int get openTasks => tasks.where((task) => !task.isDone).length;
-  int get pendingNotes => notes.length;
+  double get completionRate => tasks.isEmpty ? 0 : (completedTasks / tasks.length) * 100;
 }
 
 extension FirstOrNull<T> on Iterable<T> {
@@ -338,11 +372,12 @@ class _ProductivityHomeState extends State<ProductivityHome> {
     final screens = [
       DashboardScreen(store: _store),
       TasksScreen(store: _store),
+      CalendarScreen(store: _store),
       ProjectsScreen(store: _store),
       NotesScreen(store: _store),
     ];
 
-    final isTablet = MediaQuery.of(context).size.width >= 700;
+    final isTablet = MediaQuery.of(context).size.width >= 800;
 
     if (isTablet) {
       return AnimatedBuilder(
@@ -355,9 +390,11 @@ class _ProductivityHomeState extends State<ProductivityHome> {
                   selectedIndex: _selectedIndex,
                   onDestinationSelected: (value) => setState(() => _selectedIndex = value),
                   labelType: NavigationRailLabelType.all,
+                  extended: MediaQuery.of(context).size.width > 900,
                   destinations: const [
                     NavigationRailDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: Text('Dashboard')),
                     NavigationRailDestination(icon: Icon(Icons.checklist_outlined), selectedIcon: Icon(Icons.checklist), label: Text('Tasks')),
+                    NavigationRailDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: Text('Calendar')),
                     NavigationRailDestination(icon: Icon(Icons.folder_outlined), selectedIcon: Icon(Icons.folder), label: Text('Projects')),
                     NavigationRailDestination(icon: Icon(Icons.note_alt_outlined), selectedIcon: Icon(Icons.note_alt), label: Text('Notes')),
                   ],
@@ -381,6 +418,7 @@ class _ProductivityHomeState extends State<ProductivityHome> {
             destinations: const [
               NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
               NavigationDestination(icon: Icon(Icons.checklist_outlined), selectedIcon: Icon(Icons.checklist), label: 'Tasks'),
+              NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'Calendar'),
               NavigationDestination(icon: Icon(Icons.folder_outlined), selectedIcon: Icon(Icons.folder), label: 'Projects'),
               NavigationDestination(icon: Icon(Icons.note_alt_outlined), selectedIcon: Icon(Icons.note_alt), label: 'Notes'),
             ],
@@ -398,78 +436,125 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final upcomingTasks = store.tasks.where((task) => !task.isDone && task.dueDate != null).toList()
-      ..sort((a, b) => (a.dueDate ?? DateTime.now()).compareTo(b.dueDate ?? DateTime.now()));
+    final isTablet = MediaQuery.of(context).size.width >= 800;
+    final upcomingTasks = store.upcomingTasks().take(5).toList();
+    final overdueTasks = store.overdueTasks();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Dashboard')),
+      appBar: AppBar(
+        title: const Text('Dashboard'),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(isTablet ? 28 : 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Good morning', style: TextStyle(fontSize: 20, color: Colors.grey)),
-              const SizedBox(height: 8),
-              const Text('Your focus dashboard', style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 24),
-              GridView.count(
-                shrinkWrap: true,
-                crossAxisCount: 3,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 1.5,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  StatCard(title: 'Tasks', value: '${store.tasks.length}', color: Colors.blue),
-                  StatCard(title: 'Done', value: '${store.completedTasks}', color: Colors.green),
-                  StatCard(title: 'Open', value: '${store.openTasks}', color: Colors.orange),
-                ],
-              ),
-              const SizedBox(height: 28),
-              const Text('Today’s focus', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              if (store.tasks.where((task) => !task.isDone).isEmpty)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Good morning', style: TextStyle(fontSize: 18, color: Colors.grey)),
+                      const SizedBox(height: 6),
+                      const Text('Your focus dashboard', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+                    ],
                   ),
-                  child: const Text('No tasks pending. Great work!'),
-                )
-              else
-                ...store.tasks.where((task) => !task.isDone).take(3).map((task) => TaskRow(task: task, store: store)),
-              const SizedBox(height: 28),
-              const Text('Upcoming', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              if (upcomingTasks.isEmpty)
-                const Text('No upcoming items.')
-              else
-                ...upcomingTasks.take(3).map((task) => Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.all(14),
+                  if (isTablet)
+                    Container(
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
+                        color: Colors.blue.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
                       ),
-                      child: Row(
+                      child: Column(
                         children: [
-                          Container(width: 10, height: 10, decoration: BoxDecoration(color: priorityColor(task.priority), shape: BoxShape.circle)),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(task.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                Text(_formatDate(task.dueDate), style: const TextStyle(color: Colors.grey)),
-                              ],
-                            ),
-                          ),
-                          Text(store.projectName(task.projectId), style: const TextStyle(color: Colors.grey)),
+                          Text('${store.completionRate.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blue)),
+                          const Text('Complete', style: TextStyle(fontSize: 12, color: Colors.grey)),
                         ],
                       ),
-                    )),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 32),
+              GridView.count(
+                shrinkWrap: true,
+                crossAxisCount: isTablet ? 4 : 3,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: isTablet ? 1.3 : 1.5,
+                children: [
+                  StatCard(title: 'Tasks', value: '${store.tasks.length}', color: Colors.blue, icon: Icons.task_alt),
+                  StatCard(title: 'Done', value: '${store.completedTasks}', color: Colors.green, icon: Icons.check_circle),
+                  StatCard(title: 'Open', value: '${store.openTasks}', color: Colors.orange, icon: Icons.hourglass_empty),
+                  if (isTablet) StatCard(title: 'Projects', value: '${store.projects.length}', color: Colors.purple, icon: Icons.folder),
+                ],
+              ),
+              const SizedBox(height: 32),
+              if (overdueTasks.isNotEmpty) ...[
+                Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, color: Colors.red),
+                    const SizedBox(width: 8),
+                    const Text('Overdue Tasks', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.red)),
+                    const Spacer(),
+                    Text('${overdueTasks.length} items', style: const TextStyle(color: Colors.grey)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                ...overdueTasks.take(3).map((task) => PremiumTaskCard(task: task, store: store)),
+                const SizedBox(height: 24),
+              ],
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Today\u2019s focus', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  Text('${store.todayTasks().length} items', style: const TextStyle(color: Colors.grey)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (store.todayTasks().isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                  ),
+                  child: const Center(
+                    child: Text('No tasks today. Great work!', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                  ),
+                )
+              else
+                ...store.todayTasks().map((task) => PremiumTaskCard(task: task, store: store)),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Upcoming', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  Text('${upcomingTasks.length} items', style: const TextStyle(color: Colors.grey)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (upcomingTasks.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                  ),
+                  child: const Center(child: Text('No upcoming tasks', style: TextStyle(color: Colors.grey))),
+                )
+              else
+                ...upcomingTasks.map((task) => UpcomingTaskCard(task: task, store: store)),
+              const SizedBox(height: 28),
             ],
           ),
         ),
@@ -479,27 +564,188 @@ class DashboardScreen extends StatelessWidget {
 }
 
 class StatCard extends StatelessWidget {
-  const StatCard({super.key, required this.title, required this.value, required this.color});
+  const StatCard({super.key, required this.title, required this.value, required this.color, required this.icon});
 
   final String title;
   final String value;
   final Color color;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(16),
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: const TextStyle(color: Colors.grey)),
-          const SizedBox(height: 10),
-          Text(value, style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: color)),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: color.withOpacity(0.2), shape: BoxShape.circle),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 4),
+              Text(value, style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: color)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class PremiumTaskCard extends StatelessWidget {
+  const PremiumTaskCard({super.key, required this.task, required this.store});
+
+  final TaskItem task;
+  final AppStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: task.isOverdue ? Colors.red.withOpacity(0.05) : Colors.grey.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: task.isOverdue ? Colors.red.withOpacity(0.3) : Colors.grey.withOpacity(0.1),
+        ),
+      ),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () => store.toggleTask(task),
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: task.isDone ? priorityColor(task.priority) : Colors.transparent,
+                border: Border.all(color: priorityColor(task.priority), width: 2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: task.isDone ? const Icon(Icons.check, color: Colors.white, size: 18) : null,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  task.title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    decoration: task.isDone ? TextDecoration.lineThrough : null,
+                    color: task.isDone ? Colors.grey : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    if (task.dueDate != null) ...[
+                      Icon(Icons.calendar_today, size: 12, color: task.isOverdue ? Colors.red : Colors.grey),
+                      const SizedBox(width: 4),
+                      Text(_formatDate(task.dueDate), style: TextStyle(fontSize: 12, color: task.isOverdue ? Colors.red : Colors.grey)),
+                      const SizedBox(width: 12),
+                    ],
+                    Text(store.projectName(task.projectId), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  ],
+                ),
+                if (task.tags.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    children: task.tags
+                        .take(2)
+                        .map((tag) => Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(tag, style: const TextStyle(fontSize: 10, color: Colors.blue)),
+                            ))
+                        .toList(),
+                  ),
+                ]
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: priorityColor(task.priority).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              task.priority[0].toUpperCase() + task.priority.substring(1),
+              style: TextStyle(color: priorityColor(task.priority), fontWeight: FontWeight.w600, fontSize: 11),
+            ),
+          ),
+          const SizedBox(width: 8),
+          PopupMenuButton(
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                onTap: () => store.deleteTask(task),
+                child: const Row(
+                  children: [Icon(Icons.delete, color: Colors.red), SizedBox(width: 8), Text('Delete')],
+                ),
+              ),
+            ],
+            child: const Icon(Icons.more_vert, size: 20),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class UpcomingTaskCard extends StatelessWidget {
+  const UpcomingTaskCard({super.key, required this.task, required this.store});
+
+  final TaskItem task;
+  final AppStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.grey.withOpacity(0.04),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.withOpacity(0.1)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: priorityColor(task.priority), shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(task.title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                Text(_formatDate(task.dueDate), style: const TextStyle(color: Colors.grey, fontSize: 12)),
+              ],
+            ),
+          ),
+          Text(store.projectName(task.projectId), style: const TextStyle(color: Colors.grey, fontSize: 12)),
         ],
       ),
     );
@@ -524,28 +770,42 @@ class _TasksScreenState extends State<TasksScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = MediaQuery.of(context).size.width >= 800;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Tasks')),
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
+            SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
                   TextField(
                     controller: _titleController,
-                    decoration: const InputDecoration(labelText: 'Task title'),
+                    decoration: InputDecoration(
+                      labelText: 'Task title',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(Icons.check_circle_outline),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _notesController,
-                    decoration: const InputDecoration(labelText: 'Notes'),
+                    decoration: InputDecoration(
+                      labelText: 'Notes',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(Icons.note_outlined),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: _selectedProjectId.isEmpty ? null : _selectedProjectId,
                     hint: const Text('Project'),
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(Icons.folder_outlined),
+                    ),
                     items: [
                       const DropdownMenuItem(value: '', child: Text('General')),
                       ...widget.store.projects.map((project) => DropdownMenuItem(value: project.id, child: Text(project.name))),
@@ -555,10 +815,14 @@ class _TasksScreenState extends State<TasksScreen> {
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: _priority,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(Icons.flag_outlined),
+                    ),
                     items: const [
-                      DropdownMenuItem(value: 'low', child: Text('Low')),
-                      DropdownMenuItem(value: 'medium', child: Text('Medium')),
-                      DropdownMenuItem(value: 'high', child: Text('High')),
+                      DropdownMenuItem(value: 'low', child: Text('Low Priority')),
+                      DropdownMenuItem(value: 'medium', child: Text('Medium Priority')),
+                      DropdownMenuItem(value: 'high', child: Text('High Priority')),
                     ],
                     onChanged: (value) => setState(() => _priority = value ?? 'medium'),
                   ),
@@ -566,12 +830,17 @@ class _TasksScreenState extends State<TasksScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          _dueDate == null ? 'No due date' : _formatDate(_dueDate),
-                          style: const TextStyle(color: Colors.grey),
+                        child: TextField(
+                          readOnly: true,
+                          decoration: InputDecoration(
+                            hintText: _dueDate == null ? 'No due date' : _formatDate(_dueDate),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            prefixIcon: const Icon(Icons.calendar_today_outlined),
+                          ),
                         ),
                       ),
-                      TextButton(
+                      const SizedBox(width: 8),
+                      FilledButton.icon(
                         onPressed: () async {
                           final picked = await showDatePicker(
                             context: context,
@@ -581,13 +850,15 @@ class _TasksScreenState extends State<TasksScreen> {
                           );
                           if (picked != null) setState(() => _dueDate = picked);
                         },
-                        child: const Text('Pick date'),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Date'),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
                     child: FilledButton.icon(
                       onPressed: () {
                         widget.store.addTask(
@@ -605,7 +876,7 @@ class _TasksScreenState extends State<TasksScreen> {
                         setState(() {});
                       },
                       icon: const Icon(Icons.add),
-                      label: const Text('Add task'),
+                      label: const Text('Add Task'),
                     ),
                   ),
                 ],
@@ -617,7 +888,7 @@ class _TasksScreenState extends State<TasksScreen> {
                 builder: (context, _) {
                   return ListView(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    children: widget.store.tasks.map((task) => TaskRow(task: task, store: widget.store)).toList(),
+                    children: widget.store.tasks.map((task) => PremiumTaskCard(task: task, store: widget.store)).toList(),
                   );
                 },
               ),
@@ -627,6 +898,138 @@ class _TasksScreenState extends State<TasksScreen> {
       ),
     );
   }
+}
+
+class CalendarScreen extends StatefulWidget {
+  const CalendarScreen({super.key, required this.store});
+
+  final AppStore store;
+
+  @override
+  State<CalendarScreen> createState() => _CalendarScreenState();
+}
+
+class _CalendarScreenState extends State<CalendarScreen> {
+  late DateTime _selectedDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDate = DateTime.now();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tasksForDate = widget.store.tasks
+        .where((task) => task.dueDate != null && DateTime(task.dueDate!.year, task.dueDate!.month, task.dueDate!.day).compareTo(DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day)) == 0)
+        .toList();
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Calendar')),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => setState(() => _selectedDate = DateTime(_selectedDate.year, _selectedDate.month - 1))),
+                      Text('${_monthName(_selectedDate.month)} ${_selectedDate.year}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => setState(() => _selectedDate = DateTime(_selectedDate.year, _selectedDate.month + 1))),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  GridView.count(
+                    shrinkWrap: true,
+                    crossAxisCount: 7,
+                    children: _buildCalendarDays(),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Container(
+                margin: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${_formatDate(_selectedDate)} (${tasksForDate.length} tasks)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 12),
+                    if (tasksForDate.isEmpty)
+                      const Center(child: Text('No tasks scheduled', style: TextStyle(color: Colors.grey)))
+                    else
+                      Expanded(
+                        child: ListView(children: tasksForDate.map((task) => PremiumTaskCard(task: task, store: widget.store)).toList()),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildCalendarDays() {
+    final daysInMonth = DateTime(_selectedDate.year, _selectedDate.month + 1, 0).day;
+    final firstDay = DateTime(_selectedDate.year, _selectedDate.month, 1).weekday;
+    final days = <Widget>[];
+
+    for (var i = 0; i < 7; i++) {
+      days.add(Center(child: Text(['M', 'T', 'W', 'T', 'F', 'S', 'S'][i], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))));
+    }
+
+    for (var i = 1; i < firstDay; i++) {
+      days.add(const SizedBox());
+    }
+
+    for (var day = 1; day <= daysInMonth; day++) {
+      final date = DateTime(_selectedDate.year, _selectedDate.month, day);
+      final tasksCount = widget.store.tasks.where((task) => task.dueDate != null && DateTime(task.dueDate!.year, task.dueDate!.month, task.dueDate!.day).compareTo(date) == 0).length;
+      final isSelected = day == _selectedDate.day;
+
+      days.add(
+        GestureDetector(
+          onTap: () => setState(() => _selectedDate = date),
+          child: Container(
+            margin: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: isSelected ? Colors.blue : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: tasksCount > 0 ? Colors.blue : Colors.transparent),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(day.toString(), style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? Colors.white : Colors.black87)),
+                if (tasksCount > 0)
+                  Container(
+                    width: 4,
+                    height: 4,
+                    margin: const EdgeInsets.only(top: 2),
+                    decoration: BoxDecoration(color: isSelected ? Colors.white : Colors.blue, shape: BoxShape.circle),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return days;
+  }
+
+  String _monthName(int month) => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month - 1];
 }
 
 class ProjectsScreen extends StatefulWidget {
@@ -643,6 +1046,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = MediaQuery.of(context).size.width >= 800;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Projects')),
       body: SafeArea(
@@ -655,7 +1060,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                   Expanded(
                     child: TextField(
                       controller: _controller,
-                      decoration: const InputDecoration(labelText: 'New project'),
+                      decoration: InputDecoration(
+                        labelText: 'New project',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        prefixIcon: const Icon(Icons.add),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -674,19 +1083,43 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               child: AnimatedBuilder(
                 animation: widget.store,
                 builder: (context, _) {
-                  return ListView.builder(
-                    itemCount: widget.store.projects.length,
-                    itemBuilder: (context, index) {
-                      final project = widget.store.projects[index];
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: projectColor(project.color),
-                          child: Icon(projectIcon(project.icon), color: Colors.white),
-                        ),
-                        title: Text(project.name),
-                        subtitle: Text('${widget.store.tasks.where((task) => task.projectId == project.id).length} tasks'),
-                      );
-                    },
+                  return GridView.count(
+                    padding: const EdgeInsets.all(16),
+                    crossAxisCount: isTablet ? 3 : 2,
+                    mainAxisSpacing: 16,
+                    crossAxisSpacing: 16,
+                    children: widget.store.projects
+                        .map((project) => Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: projectColor(project.color).withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: projectColor(project.color).withOpacity(0.2)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      color: projectColor(project.color),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Icon(projectIcon(project.icon), color: Colors.white),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(project.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                  if (project.description.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(project.description, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                  ],
+                                  const Spacer(),
+                                  Text('${widget.store.tasksForProject(project.id).length} tasks', style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w500)),
+                                ],
+                              ),
+                            ))
+                        .toList(),
                   );
                 },
               ),
@@ -719,33 +1152,46 @@ class _NotesScreenState extends State<NotesScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
+            SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
                   TextField(
                     controller: _titleController,
-                    decoration: const InputDecoration(labelText: 'Note title'),
+                    decoration: InputDecoration(
+                      labelText: 'Note title',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(Icons.title),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _contentController,
-                    maxLines: 4,
-                    decoration: const InputDecoration(labelText: 'Notes content'),
+                    maxLines: 5,
+                    decoration: InputDecoration(
+                      labelText: 'Notes content',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(Icons.description_outlined),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: _selectedProjectId.isEmpty ? null : _selectedProjectId,
                     hint: const Text('Project'),
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(Icons.folder_outlined),
+                    ),
                     items: [
                       const DropdownMenuItem(value: '', child: Text('General')),
                       ...widget.store.projects.map((project) => DropdownMenuItem(value: project.id, child: Text(project.name))),
                     ],
                     onChanged: (value) => setState(() => _selectedProjectId = value ?? ''),
                   ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
                     child: FilledButton.icon(
                       onPressed: () {
                         widget.store.addNote(
@@ -759,7 +1205,7 @@ class _NotesScreenState extends State<NotesScreen> {
                         setState(() {});
                       },
                       icon: const Icon(Icons.save),
-                      label: const Text('Save note'),
+                      label: const Text('Save Note'),
                     ),
                   ),
                 ],
@@ -771,91 +1217,47 @@ class _NotesScreenState extends State<NotesScreen> {
                 builder: (context, _) {
                   return ListView(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    children: widget.store.notes.map((note) => ListTile(
-                          title: Text(note.title),
-                          subtitle: Text(note.content.isEmpty ? 'No content' : note.content),
-                          trailing: IconButton(
-                            onPressed: () => widget.store.deleteNote(note),
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                          ),
-                        )).toList(),
+                    children: widget.store.notes
+                        .map((note) => Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.withOpacity(0.04),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: Colors.grey.withOpacity(0.1)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(note.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                        if (note.content.isNotEmpty) ...[
+                                          const SizedBox(height: 4),
+                                          Text(note.content, style: const TextStyle(color: Colors.grey, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                        ],
+                                        if (note.projectId != null) ...[
+                                          const SizedBox(height: 6),
+                                          Text(widget.store.projectName(note.projectId), style: const TextStyle(color: Colors.blue, fontSize: 11)),
+                                        ]
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    onPressed: () => widget.store.deleteNote(note),
+                                    icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                  ),
+                                ],
+                              ),
+                            ))
+                        .toList(),
                   );
                 },
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class TaskRow extends StatelessWidget {
-  const TaskRow({super.key, required this.task, required this.store});
-
-  final TaskItem task;
-  final AppStore store;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => store.toggleTask(task),
-            icon: Icon(
-              task.isDone ? Icons.check_box : Icons.check_box_outline_blank,
-              color: task.isDone ? Colors.green : Colors.grey,
-            ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  task.title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    decoration: task.isDone ? TextDecoration.lineThrough : null,
-                  ),
-                ),
-                if (task.notes.isNotEmpty)
-                  Text(task.notes, style: const TextStyle(color: Colors.grey)),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    if (task.dueDate != null)
-                      Text(_formatDate(task.dueDate), style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                    if (task.dueDate != null) const SizedBox(width: 12),
-                    Text(store.projectName(task.projectId), style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: priorityColor(task.priority).withOpacity(0.14),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text(
-              task.priority[0].toUpperCase() + task.priority.substring(1),
-              style: TextStyle(color: priorityColor(task.priority), fontWeight: FontWeight.w600),
-            ),
-          ),
-          IconButton(
-            onPressed: () => store.deleteTask(task),
-            icon: const Icon(Icons.delete_outline, color: Colors.red),
-          ),
-        ],
       ),
     );
   }
@@ -904,19 +1306,6 @@ IconData projectIcon(String iconName) {
 
 String _formatDate(DateTime? date) {
   if (date == null) return 'No due date';
-  final formatter = DateFormat('MMM d, yyyy');
-  return formatter.format(date);
-}
-
-class DateFormat {
-  const DateFormat(this.pattern);
-
-  final String pattern;
-
-  String format(DateTime date) {
-    final month = date.month.toString().padLeft(2, '0');
-    final day = date.day.toString().padLeft(2, '0');
-    final year = date.year.toString();
-    return '$month/$day/$year';
-  }
+  final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return '${months[date.month - 1]} ${date.day}, ${date.year}';
 }
